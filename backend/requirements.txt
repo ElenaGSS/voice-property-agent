@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-multipart
+transformers
+torch
+accelerate
+langgraph
+pydantic
+openai
+python-dotenv
