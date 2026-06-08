@@ -112,7 +112,7 @@ export default function Home() {
       setTranscript(text);
     } catch (transcriptionError) {
       setError(
-        "Backend не смог обработать аудио. Можно включить WHISPER_MOCK_MODE=true или ввести ответ вручную.",
+        "Сервер не смог обработать аудио. Можно включить демонстрационный режим распознавания или ввести ответ вручную.",
       );
     } finally {
       setIsTranscribing(false);
@@ -170,7 +170,7 @@ export default function Home() {
       setReport(result);
       setScreen("report");
     } catch (reportError) {
-      setError("Не удалось сформировать отчёт. Проверьте backend и попробуйте снова.");
+      setError("Не удалось сформировать отчёт. Проверьте сервер и попробуйте снова.");
     } finally {
       setIsGeneratingReport(false);
     }
@@ -198,35 +198,100 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen">
-      <div className="mx-auto flex w-full max-w-5xl flex-col px-5 py-8 sm:py-12">
+    <main className="mediterranean-shell min-h-screen">
+      <div className="mx-auto flex w-full max-w-6xl flex-col px-5 py-8 sm:py-12">
         {screen === "landing" && (
-          <section className="flex min-h-[70vh] flex-col items-start justify-center">
-            <p className="mb-3 rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
-              AI automation / productivity course MVP
-            </p>
-            <h1 className="max-w-3xl text-4xl font-bold tracking-tight text-slate-950 sm:text-6xl">
-              Voice Property Intake Agent
-            </h1>
-            <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600">
-              Голосовой AI-агент для первичного интервью собственника
-              недвижимости.
-            </p>
-            <button
-              onClick={startInterview}
-              className="mt-8 rounded-lg bg-slate-950 px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-slate-800"
-            >
-              Начать интервью
-            </button>
+          <section className="grid min-h-[76vh] items-center gap-10 lg:grid-cols-[1.08fr_0.92fr]">
+            <div className="max-w-3xl">
+              <p className="mb-4 inline-flex rounded-full border border-slate-200 bg-white/80 px-4 py-2 text-sm font-semibold text-[#173b63] shadow-sm">
+                Voice Property Intake Agent · MVP
+              </p>
+              <h1 className="text-4xl font-bold tracking-tight text-slate-950 sm:text-6xl">
+                Голосовой AI-агент по недвижимости
+              </h1>
+              <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-700">
+                Профессиональный голосовой AI-опрос собственника недвижимости:
+                контакты, детали объекта, мотивация, ожидания и структурированный
+                отчёт для риэлтора.
+              </p>
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                <button
+                  onClick={startInterview}
+                  className="primary-action rounded-lg px-7 py-4 font-semibold text-white transition duration-200"
+                >
+                  Начать интервью
+                </button>
+                <span className="rounded-full bg-white/80 px-4 py-2 text-sm font-medium text-slate-600 shadow-sm ring-1 ring-slate-200">
+                  4 раунда · 12 вопросов · Markdown-отчёт
+                </span>
+              </div>
+            </div>
+
+            <div className="glass-panel p-4 sm:p-5">
+              <div className="summary-preview p-5 sm:p-6">
+                <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-5">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      Предварительная карточка
+                    </p>
+                    <h2 className="mt-2 text-xl font-semibold text-slate-950">
+                      Бриф собственника
+                    </h2>
+                  </div>
+                  <span className="rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-800 ring-1 ring-teal-100">
+                    Готово
+                  </span>
+                </div>
+
+                <div className="mt-5 space-y-3">
+                  {[
+                    [
+                      "Контактные данные",
+                      "Имя, телефон или email, статус собственника",
+                    ],
+                    ["Детали объекта", "Локация, тип, описание собственника"],
+                    [
+                      "Мотивация",
+                      "Продажа или аренда, причина, важный контекст",
+                    ],
+                    ["Оценка лида", "HOT / WARM / INFO с кратким объяснением"],
+                    ["Markdown-отчёт", "Структурированное резюме для риэлтора"],
+                  ].map(([title, description]) => (
+                    <div
+                      key={title}
+                      className="summary-row flex items-start gap-3 p-4"
+                    >
+                      <span className="summary-dot mt-2 shrink-0" />
+                      <div>
+                        <p className="font-semibold text-slate-900">{title}</p>
+                        <p className="mt-1 text-sm leading-6 text-slate-500">
+                          {description}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-5 rounded-lg border border-slate-200 bg-[#173b63] p-4 text-white shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-100">
+                    Следующий шаг
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-blue-50">
+                    Сформировать краткий Markdown-отчёт и передать заявку
+                    консультанту.
+                  </p>
+                </div>
+              </div>
+            </div>
           </section>
         )}
 
         {screen === "interview" && (
-          <section className="grid gap-6 lg:grid-cols-[1fr_320px]">
-            <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <section className="grid gap-6 lg:grid-cols-[1fr_340px]">
+            <div className="soft-card rounded-lg p-6 sm:p-7">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-medium text-sky-700">
+                  <p className="text-sm font-semibold text-sky-800">
                     Раунд {currentRound}: {ROUND_NAMES[currentRound]} · вопрос{" "}
                     {currentQuestionIndex + 1}
                   </p>
@@ -234,30 +299,48 @@ export default function Home() {
                     Прогресс: {progressLabel}
                   </p>
                 </div>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">
+                <span className="rounded-full bg-slate-50 px-3 py-1 text-sm font-medium text-[#173b63] ring-1 ring-slate-200">
                   {isInterviewComplete ? "Интервью завершено" : "Интервью"}
                 </span>
               </div>
 
+              <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-[#173b63] to-teal-700 transition-all duration-500"
+                  style={{
+                    width: `${
+                      ((answers.length + (isInterviewComplete ? 0 : 1)) /
+                        TOTAL_QUESTIONS) *
+                      100
+                    }%`,
+                  }}
+                />
+              </div>
+
               {!isInterviewComplete ? (
                 <>
-                  <h2 className="mt-8 text-2xl font-semibold leading-9 text-slate-950">
-                    {currentQuestion}
-                  </h2>
+                  <div className="mt-8 rounded-lg border border-slate-200 bg-white/80 p-5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[#173b63]">
+                      Текущий вопрос
+                    </p>
+                    <h2 className="mt-3 text-2xl font-semibold leading-9 text-slate-950">
+                      {currentQuestion}
+                    </h2>
+                  </div>
 
                   <div className="mt-6 flex flex-wrap gap-3">
                     {!isRecording ? (
                       <button
                         onClick={startRecording}
                         disabled={isTranscribing || isGeneratingQuestion}
-                        className="rounded-lg bg-sky-600 px-5 py-3 font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                        className="primary-action rounded-lg px-5 py-3 font-semibold text-white transition duration-200 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
                       >
                         Записать аудио
                       </button>
                     ) : (
                       <button
                         onClick={stopRecording}
-                        className="rounded-lg bg-red-600 px-5 py-3 font-semibold text-white transition hover:bg-red-700"
+                        className="rounded-lg bg-red-500 px-5 py-3 font-semibold text-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-red-600"
                       >
                         Остановить запись
                       </button>
@@ -265,7 +348,7 @@ export default function Home() {
                     <button
                       onClick={saveAnswerAndContinue}
                       disabled={isRecording || isTranscribing || isGeneratingQuestion}
-                      className="rounded-lg border border-slate-300 px-5 py-3 font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                      className="rounded-lg border border-slate-200 bg-white/80 px-5 py-3 font-semibold text-slate-800 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-sky-200 hover:bg-white disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:translate-y-0"
                     >
                       Сохранить ответ и продолжить
                     </button>
@@ -285,11 +368,11 @@ export default function Home() {
                     onChange={(event) => setTranscript(event.target.value)}
                     rows={6}
                     placeholder="После записи здесь появится расшифровка. Текст можно исправить вручную."
-                    className="mt-2 w-full resize-y rounded-lg border border-slate-300 bg-white p-4 leading-7 outline-none ring-sky-200 transition focus:ring-4"
+                    className="mt-2 w-full resize-y rounded-lg border border-slate-200 bg-white/90 p-4 leading-7 shadow-inner outline-none ring-sky-200 transition focus:border-sky-300 focus:ring-4"
                   />
                 </>
               ) : (
-                <div className="mt-8">
+                <div className="mt-8 rounded-lg border border-slate-200 bg-white/80 p-5">
                   <h2 className="text-2xl font-semibold text-slate-950">
                     Все {TOTAL_QUESTIONS} вопросов пройдены
                   </h2>
@@ -300,7 +383,7 @@ export default function Home() {
                   <button
                     onClick={buildReport}
                     disabled={isGeneratingReport}
-                    className="mt-6 rounded-lg bg-slate-950 px-6 py-3 font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    className="primary-action mt-6 rounded-lg px-6 py-3 font-semibold text-white transition duration-200 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
                   >
                     {isGeneratingReport ? "Формируем отчёт..." : "Сформировать отчёт"}
                   </button>
@@ -308,23 +391,31 @@ export default function Home() {
               )}
 
               {error && (
-                <p className="mt-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                <p className="mt-5 rounded-lg border border-red-200 bg-red-50/90 p-3 text-sm text-red-700 shadow-sm">
                   {error}
                 </p>
               )}
             </div>
 
-            <aside className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="font-semibold text-slate-950">Ответы</h3>
+            <aside className="soft-card rounded-lg p-5">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="font-semibold text-slate-950">Ответы</h3>
+                <span className="rounded-full bg-slate-50 px-3 py-1 text-xs font-semibold text-[#173b63] ring-1 ring-slate-200">
+                  {answers.length}/{TOTAL_QUESTIONS}
+                </span>
+              </div>
               <div className="mt-4 space-y-4">
                 {answers.length === 0 && (
-                  <p className="text-sm leading-6 text-slate-500">
+                  <p className="rounded-lg bg-slate-50 p-4 text-sm leading-6 text-slate-500">
                     Пока ответов нет. После сохранения они появятся здесь.
                   </p>
                 )}
                 {answers.map((item, index) => (
-                  <div key={`${item.round}-${index}`} className="border-t pt-4">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <div
+                    key={`${item.round}-${index}`}
+                    className="rounded-lg border border-slate-100 bg-white/80 p-4 shadow-sm"
+                  >
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[#173b63]">
                       Раунд {item.round}
                       {ROUND_NAMES[item.round] ? ` · ${ROUND_NAMES[item.round]}` : ""}
                     </p>
@@ -345,7 +436,7 @@ export default function Home() {
           <section className="space-y-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-medium text-sky-700">
+                <p className="text-sm font-semibold text-sky-800">
                   Итог интервью
                 </p>
                 <h1 className="mt-2 text-3xl font-bold text-slate-950">
@@ -354,35 +445,35 @@ export default function Home() {
               </div>
               <button
                 onClick={startInterview}
-                className="rounded-lg border border-slate-300 px-4 py-2 font-semibold text-slate-800 transition hover:bg-white"
+                className="rounded-lg border border-slate-200 bg-white/80 px-4 py-2 font-semibold text-slate-800 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-white"
               >
                 Начать заново
               </button>
             </div>
 
             <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-              <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="soft-card rounded-lg p-6">
                 <div className="flex flex-wrap gap-3">
                   <button
                     onClick={downloadReport}
-                    className="rounded-lg bg-slate-950 px-4 py-2 font-semibold text-white transition hover:bg-slate-800"
+                    className="primary-action rounded-lg px-4 py-2 font-semibold text-white transition duration-200"
                   >
                     Скачать отчёт .md
                   </button>
                   <button
                     onClick={copyReport}
-                    className="rounded-lg border border-slate-300 px-4 py-2 font-semibold text-slate-800 transition hover:bg-slate-50"
+                    className="rounded-lg border border-slate-200 bg-white/80 px-4 py-2 font-semibold text-slate-800 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-white"
                   >
                     Скопировать отчёт
                   </button>
                 </div>
-                <pre className="mt-6 max-h-[640px] overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950 p-5 text-sm leading-7 text-slate-50">
+                <pre className="mt-6 max-h-[640px] overflow-auto whitespace-pre-wrap rounded-lg border border-slate-200 bg-white/90 p-5 text-sm leading-7 text-slate-700 shadow-inner">
                   {report.markdown_report}
                 </pre>
               </div>
 
               <aside className="space-y-4">
-                <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="soft-card rounded-lg p-5">
                   <h3 className="font-semibold text-slate-950">
                     Карточка клиента
                   </h3>
@@ -432,7 +523,7 @@ function StatusLine({
   }
 
   return (
-    <p className="mt-4 rounded-lg bg-sky-50 p-3 text-sm font-medium text-sky-700">
+    <p className="mt-4 rounded-lg border border-sky-100 bg-sky-50/90 p-3 text-sm font-semibold text-sky-800 shadow-sm">
       {message}
     </p>
   );
