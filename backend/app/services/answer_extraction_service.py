@@ -48,6 +48,8 @@ RENT_QUESTION_MARKERS = [
 ]
 AREA_QUESTION_MARKERS = ["площадь", "м²", "м2", "metros", "area"]
 DISTRICT_QUESTION_MARKERS = ["район", "локац", "location", "district", "zona", "barrio"]
+CONTACT_QUESTION_MARKERS = ["телефон", "email", "связи", "contact", "phone"]
+INVALID_CONTACT_TEXT = "Номер распознан некорректно. Введите вручную или повторите запись."
 NEGATIVE_RENT_MARKERS = [
     "-",
     "—",
@@ -57,6 +59,15 @@ NEGATIVE_RENT_MARKERS = [
     "нет",
     "n/a",
 ]
+FINAL_PUNCTUATION_PATTERN = re.compile(r"[\s.,!?;:]+$")
+MARKDOWN_EMAIL_PATTERN = re.compile(
+    r"\[[^\]\s]+@[^\]\s]+\]\(mailto:[^)]+\)",
+    flags=re.IGNORECASE,
+)
+EMAIL_PATTERN = re.compile(
+    r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}",
+    flags=re.IGNORECASE,
+)
 RUSSIAN_NUMBER_WORDS: dict[str, float] = {
     "ноль": 0,
     "один": 1,
@@ -215,6 +226,62 @@ def normalize_numeric_answer(question_text: str, answer_text: str) -> str:
         return _format_normalized_number(numeric_value) if numeric_value else clean_answer
 
     return clean_answer
+
+
+def clean_transcribed_text(question_text: str, answer_text: str) -> str:
+    if _is_contact_question(question_text):
+        return normalize_contact_answer(question_text, answer_text)
+    numeric_answer = normalize_numeric_answer(question_text, answer_text)
+    if numeric_answer != answer_text.strip():
+        return numeric_answer
+    return _strip_final_punctuation(answer_text.strip())
+
+
+def normalize_contact_answer(question_text: str, answer_text: str) -> str:
+    clean_answer = _strip_final_punctuation(answer_text.strip())
+    if not clean_answer:
+        return clean_answer
+    if not _is_contact_question(question_text):
+        return clean_answer
+
+    markdown_email = MARKDOWN_EMAIL_PATTERN.search(clean_answer)
+    if markdown_email:
+        return _strip_final_punctuation(markdown_email.group(0))
+
+    email = EMAIL_PATTERN.search(clean_answer)
+    if email:
+        return _strip_final_punctuation(email.group(0))
+
+    phone = _normalize_phone_candidate(clean_answer)
+    if not phone:
+        return clean_answer
+
+    digits = re.sub(r"\D", "", phone)
+    if len(digits) > 15:
+        return INVALID_CONTACT_TEXT
+    if len(digits) == 9:
+        return digits
+    if len(digits) == 11 and digits.startswith("34"):
+        return f"+{digits}" if phone.startswith("+") else digits
+    if 10 <= len(digits) <= 15:
+        return f"+{digits}" if phone.startswith("+") else digits
+    return clean_answer
+
+
+def _is_contact_question(question_text: str) -> bool:
+    return _contains_any(_normalize(question_text), CONTACT_QUESTION_MARKERS)
+
+
+def _strip_final_punctuation(value: str) -> str:
+    return FINAL_PUNCTUATION_PATTERN.sub("", value).strip()
+
+
+def _normalize_phone_candidate(value: str) -> str:
+    compact = re.sub(r"[\s,.\-()]+", "", value.strip())
+    compact = re.sub(r"(?!^\+)\D", "", compact)
+    if compact.startswith("+"):
+        return "+" + re.sub(r"\D", "", compact[1:])
+    return re.sub(r"\D", "", compact)
 
 
 def _extract_values_from_question_answers(answers: list[AnswerItem]) -> dict[str, float | str | None]:

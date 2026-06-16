@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, File, Form, UploadFile
 
 from app.models.schemas import TranscriptionResponse
-from app.services.answer_extraction_service import normalize_numeric_answer
+from app.services.answer_extraction_service import clean_transcribed_text
 from app.services.whisper_service import transcribe_audio
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ async def transcribe(
 
         logger.info("Received audio file %s saved to temporary path", file.filename)
         text = transcribe_audio(temp_path)
-        normalized_text = normalize_numeric_answer(current_question or "", text)
+        normalized_text = clean_transcribed_text(current_question or "", text)
         return TranscriptionResponse(
             text=normalized_text,
             raw_text=text if normalized_text != text else None,

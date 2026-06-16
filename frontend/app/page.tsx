@@ -12,6 +12,9 @@ import { AnswerItem, ReportResponse, ToolResult } from "@/types/interview";
 const INTERVIEW_MODE =
   process.env.NEXT_PUBLIC_INTERVIEW_MODE === "full" ? "full" : "demo";
 const TOTAL_QUESTIONS = INTERVIEW_MODE === "full" ? 12 : 7;
+const DEMO_RECORDING_LIMIT_MS = 12_000;
+const INVALID_CONTACT_MESSAGE =
+  "Номер распознан некорректно. Введите вручную или повторите запись.";
 const FIRST_QUESTION = "Как вас зовут?";
 const FULL_ROUND_NAMES: Record<number, string> = {
   1: "Контактные данные",
@@ -63,11 +66,13 @@ export default function Home() {
   const chunksRef = useRef<BlobPart[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const processingStartedAtRef = useRef<number | null>(null);
+  const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const progressLabel = useMemo(
     () => `${answers.length + (isInterviewComplete ? 0 : 1)} / ${TOTAL_QUESTIONS}`,
     [answers.length, isInterviewComplete],
   );
+  const hasInvalidContactTranscript = transcript.includes(INVALID_CONTACT_MESSAGE);
 
   useEffect(() => {
     if (!isTranscribing && !isGeneratingQuestion && !isGeneratingReport) {
@@ -103,6 +108,7 @@ export default function Home() {
     setError("");
     setReport(null);
     setIsInterviewComplete(false);
+    clearRecordingTimeout();
   }
 
   async function startRecording() {
@@ -122,15 +128,22 @@ export default function Home() {
       };
 
       recorder.onstop = async () => {
+        clearRecordingTimeout();
         const audioBlob = new Blob(chunksRef.current, {
           type: recorder.mimeType || "audio/webm",
         });
         streamRef.current?.getTracks().forEach((track) => track.stop());
+        setIsRecording(false);
         await handleTranscription(audioBlob);
       };
 
       recorder.start();
       setIsRecording(true);
+      if (INTERVIEW_MODE === "demo") {
+        recordingTimeoutRef.current = setTimeout(() => {
+          stopRecording();
+        }, DEMO_RECORDING_LIMIT_MS);
+      }
     } catch (recordingError) {
       setError(
         "Не удалось получить доступ к микрофону. Проверьте разрешения браузера.",
@@ -139,8 +152,18 @@ export default function Home() {
   }
 
   function stopRecording() {
-    recorderRef.current?.stop();
+    clearRecordingTimeout();
+    if (recorderRef.current?.state === "recording") {
+      recorderRef.current.stop();
+    }
     setIsRecording(false);
+  }
+
+  function clearRecordingTimeout() {
+    if (recordingTimeoutRef.current) {
+      clearTimeout(recordingTimeoutRef.current);
+      recordingTimeoutRef.current = null;
+    }
   }
 
   async function handleTranscription(audioBlob: Blob) {
@@ -152,9 +175,18 @@ export default function Home() {
       const text = await transcribeAudio(audioBlob, currentQuestion);
       setTranscript(text);
     } catch (transcriptionError) {
-      setError(
-        "Сервер не смог обработать аудио. Можно включить демонстрационный режим распознавания или ввести ответ вручную.",
-      );
+      if (
+        transcriptionError instanceof Error &&
+        transcriptionError.message === "TRANSCRIBE_TIMEOUT"
+      ) {
+        setError(
+          "Распознавание заняло слишком много времени. Можно повторить запись или ввести ответ вручную.",
+        );
+      } else {
+        setError(
+          "Сервер не смог обработать аудио. Можно включить демонстрационный режим распознавания или ввести ответ вручную.",
+        );
+      }
     } finally {
       setIsTranscribing(false);
     }
@@ -163,6 +195,10 @@ export default function Home() {
   async function saveAnswerAndContinue() {
     if (!transcript.trim()) {
       setError("Добавьте ответ: запишите аудио или введите текст вручную.");
+      return;
+    }
+    if (hasInvalidContactTranscript) {
+      setError("Исправьте контакт вручную или повторите запись.");
       return;
     }
 
@@ -423,12 +459,23 @@ export default function Home() {
                     </button>
                     <button
                       onClick={saveAnswerAndContinue}
-                      disabled={isRecording || isTranscribing || isGeneratingQuestion}
+                      disabled={
+                        isRecording ||
+                        isTranscribing ||
+                        isGeneratingQuestion ||
+                        hasInvalidContactTranscript
+                      }
                       className="rounded-lg border border-slate-200 bg-white/80 px-5 py-3 font-semibold text-slate-800 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-sky-200 hover:bg-white disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:translate-y-0"
                     >
                       Сохранить ответ и продолжить
                     </button>
                   </div>
+                  {INTERVIEW_MODE === "demo" && (
+                    <p className="mt-3 text-sm leading-6 text-slate-500">
+                      Для короткого ответа достаточно 3–8 секунд. Запись
+                      остановится автоматически через 12 секунд.
+                    </p>
+                  )}
 
                   <StatusLine
                     isRecording={isRecording}
@@ -448,6 +495,12 @@ export default function Home() {
                     placeholder="После записи здесь появится расшифровка. Текст можно исправить вручную."
                     className="mt-2 w-full resize-y rounded-lg border border-slate-200 bg-white/90 p-4 leading-7 shadow-inner outline-none ring-sky-200 transition focus:border-sky-300 focus:ring-4"
                   />
+                  {hasInvalidContactTranscript && (
+                    <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-800">
+                      Номер распознан некорректно. Введите контакт вручную или
+                      повторите запись.
+                    </p>
+                  )}
                 </>
               ) : (
                 <div className="mt-8 rounded-lg border border-slate-200 bg-white/80 p-5">

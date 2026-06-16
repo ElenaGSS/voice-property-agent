@@ -8,6 +8,7 @@ import {
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, "") ||
   "http://localhost:8000";
+const TRANSCRIBE_TIMEOUT_MS = 60_000;
 
 async function request<T>(path: string, options: RequestInit): Promise<T> {
   const response = await fetch(`${BACKEND_URL}${path}`, options);
@@ -27,15 +28,27 @@ export async function transcribeAudio(
   if (currentQuestion) {
     formData.append("current_question", currentQuestion);
   }
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), TRANSCRIBE_TIMEOUT_MS);
 
-  const data = await request<{ text: string; raw_text?: string | null }>(
-    "/api/transcribe",
-    {
-      method: "POST",
-      body: formData,
-    },
-  );
-  return data.text;
+  try {
+    const data = await request<{ text: string; raw_text?: string | null }>(
+      "/api/transcribe",
+      {
+        method: "POST",
+        body: formData,
+        signal: controller.signal,
+      },
+    );
+    return data.text;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("TRANSCRIBE_TIMEOUT");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 export async function fetchNextQuestion(
