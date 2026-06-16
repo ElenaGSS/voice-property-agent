@@ -4,14 +4,34 @@ Voice Property Intake Agent is a simple educational MVP for an AI automation and
 
 ## What the Agent Does
 
-The agent runs a 4-round interview with 12 total questions:
+For the public course demo, the agent runs a short 7-question demo interview that quickly collects the data needed for the agent tools:
 
 1. Contact details
-2. Object details
-3. Reason for selling or renting
-4. Expectations, concerns, and next steps
+2. Preferred phone or email
+3. Barcelona district
+4. Apartment area
+5. Purchase price
+6. Planned sale price
+7. Expected monthly rent
 
-After each round, the backend analyzes the collected answers. If an OpenAI API key is available, it can use an LLM for summaries, adaptive questions, and reports. If no key is available, it uses deterministic fallback logic so the demo still works.
+The full production-style flow is preserved in code as a 4-round interview with 12 total questions:
+
+1. Contact details
+2. Object details: Barcelona district, property type, condition, area, and rooms
+3. Sale data: sale/rent/both intent, purchase price, and planned sale price
+4. Rental, expectations, and circumstances: monthly rent, priorities, mortgage, tenants, inheritance, renovation, or urgency
+
+Set `INTERVIEW_MODE=full` on the backend and `NEXT_PUBLIC_INTERVIEW_MODE=full` on the frontend to return to the full interview. If these variables are not set, the app uses the short demo flow.
+
+After each round or demo step, the backend analyzes the collected answers. If an OpenAI API key is available, it can use an LLM for summaries, adaptive questions, and reports. If no key is available, it uses deterministic fallback logic so the demo still works.
+
+In v2, the backend also includes agent tools that run automatically when the answers contain enough data:
+
+- Tax Estimator Tool for an approximate Spanish capital gains tax simulation.
+- Barcelona Market Data Tool for local MVP price-per-square-meter comparison.
+- Rental Yield Analyzer for gross rental yield estimates.
+
+The tools do not use live APIs or scraping. Market data is a local MVP dataset and should be updated from official/open data sources before real use. Tax calculations are approximate simulations, not legal or tax advice.
 
 ## Architecture
 
@@ -24,6 +44,8 @@ voice-property-agent/
 ```
 
 The frontend records audio with the browser MediaRecorder API and sends it to the backend. The backend transcribes audio, runs interview logic, and returns the next question or final report.
+
+The frontend also shows clearer waiting stages during slow Hugging Face CPU transcription: audio received, voice recognition, answer analysis, and next-question selection.
 
 ## Tech Stack
 
@@ -96,10 +118,12 @@ Backend:
 - `OPENAI_API_KEY` optional. Enables OpenAI-based analysis and report generation.
 - `OPENAI_MODEL` optional. Defaults to `gpt-4o-mini`.
 - `WHISPER_MOCK_MODE=true` optional. Skips Whisper loading and returns demo text.
+- `INTERVIEW_MODE=full` optional. Defaults to the 7-question demo flow.
 
 Frontend:
 
 - `NEXT_PUBLIC_BACKEND_URL` optional. Defaults to `http://localhost:8000`.
+- `NEXT_PUBLIC_INTERVIEW_MODE=full` optional. Defaults to the 7-question demo flow.
 
 ## Demo Flow
 
@@ -107,8 +131,8 @@ Frontend:
 2. Start the frontend.
 3. Click "Начать интервью".
 4. Record a voice answer or type the answer manually.
-5. Save the answer and continue through 12 questions.
-6. Generate the Markdown report.
+5. Save the answer and continue through 7 demo questions.
+6. The app generates the Markdown report automatically.
 7. Copy or download the report.
 
 ## MVP Notes

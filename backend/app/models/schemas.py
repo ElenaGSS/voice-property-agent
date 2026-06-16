@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -16,7 +16,7 @@ class TranscriptionResponse(BaseModel):
 class NextQuestionRequest(BaseModel):
     session_id: str
     current_round: int = Field(..., ge=1, le=4)
-    current_question_index: int = Field(..., ge=0, le=2)
+    current_question_index: int = Field(..., ge=0, le=12)
     answers: list[AnswerItem] = []
 
 
@@ -52,3 +52,5 @@ class GenerateReportResponse(BaseModel):
     client_card: ClientCard
     lead_score: LeadScore
     markdown_report: str
+    used_tools: list[str] = Field(default_factory=list)
+    tool_results: dict[str, dict[str, Any]] = Field(default_factory=dict)

@@ -1,25 +1,43 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LeadBadge } from "@/components/LeadBadge";
 import {
   fetchNextQuestion,
   generateReport,
   transcribeAudio,
 } from "@/services/api";
-import { AnswerItem, ReportResponse } from "@/types/interview";
+import { AnswerItem, ReportResponse, ToolResult } from "@/types/interview";
 
-const TOTAL_QUESTIONS = 12;
+const INTERVIEW_MODE =
+  process.env.NEXT_PUBLIC_INTERVIEW_MODE === "full" ? "full" : "demo";
+const TOTAL_QUESTIONS = INTERVIEW_MODE === "full" ? 12 : 7;
 const FIRST_QUESTION = "Как вас зовут?";
-const ROUND_NAMES: Record<number, string> = {
+const FULL_ROUND_NAMES: Record<number, string> = {
   1: "Контактные данные",
   2: "Объект",
-  3: "Причина обращения",
-  4: "Ожидания",
+  3: "Продажа",
+  4: "Аренда, ожидания и важные обстоятельства",
+};
+const DEMO_ROUND_NAMES: Record<number, string> = {
+  1: "Демо-опрос для расчёта",
+};
+const ROUND_NAMES = INTERVIEW_MODE === "full" ? FULL_ROUND_NAMES : DEMO_ROUND_NAMES;
+
+type SavedAnswer = AnswerItem & {
+  question_index: number;
 };
 
 function createSessionId() {
   return `session-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function toApiAnswers(answers: SavedAnswer[]): AnswerItem[] {
+  return answers.map(({ round, question, answer }) => ({
+    round,
+    question,
+    answer,
+  }));
 }
 
 export default function Home() {
@@ -30,7 +48,7 @@ export default function Home() {
   const [currentRound, setCurrentRound] = useState(1);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [currentQuestion, setCurrentQuestion] = useState(FIRST_QUESTION);
-  const [answers, setAnswers] = useState<AnswerItem[]>([]);
+  const [answers, setAnswers] = useState<SavedAnswer[]>([]);
   const [transcript, setTranscript] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -39,15 +57,36 @@ export default function Home() {
   const [isInterviewComplete, setIsInterviewComplete] = useState(false);
   const [error, setError] = useState("");
   const [report, setReport] = useState<ReportResponse | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const processingStartedAtRef = useRef<number | null>(null);
 
   const progressLabel = useMemo(
     () => `${answers.length + (isInterviewComplete ? 0 : 1)} / ${TOTAL_QUESTIONS}`,
     [answers.length, isInterviewComplete],
   );
+
+  useEffect(() => {
+    if (!isTranscribing && !isGeneratingQuestion && !isGeneratingReport) {
+      processingStartedAtRef.current = null;
+      return;
+    }
+
+    if (!processingStartedAtRef.current) {
+      processingStartedAtRef.current = Date.now();
+    }
+
+    const timer = window.setInterval(() => {
+      if (processingStartedAtRef.current) {
+        setElapsedSeconds(Math.floor((Date.now() - processingStartedAtRef.current) / 1000));
+      }
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [isTranscribing, isGeneratingQuestion, isGeneratingReport]);
 
   async function startInterview() {
     resetState();
@@ -106,6 +145,8 @@ export default function Home() {
 
   async function handleTranscription(audioBlob: Blob) {
     setIsTranscribing(true);
+    processingStartedAtRef.current = Date.now();
+    setElapsedSeconds(0);
     setError("");
     try {
       const text = await transcribeAudio(audioBlob);
@@ -131,6 +172,7 @@ export default function Home() {
         round: currentRound,
         question: currentQuestion,
         answer: transcript.trim(),
+        question_index: currentQuestionIndex,
       },
     ];
     setAnswers(updatedAnswers);
@@ -139,16 +181,21 @@ export default function Home() {
 
     if (updatedAnswers.length >= TOTAL_QUESTIONS) {
       setIsInterviewComplete(true);
+      if (INTERVIEW_MODE === "demo") {
+        await buildReport(updatedAnswers);
+      }
       return;
     }
 
     setIsGeneratingQuestion(true);
+    processingStartedAtRef.current = Date.now();
+    setElapsedSeconds(0);
     try {
       const next = await fetchNextQuestion({
         session_id: sessionId,
         current_round: currentRound,
         current_question_index: currentQuestionIndex,
-        answers: updatedAnswers,
+        answers: toApiAnswers(updatedAnswers),
       });
 
       setCurrentRound(next.round);
@@ -162,11 +209,28 @@ export default function Home() {
     }
   }
 
-  async function buildReport() {
+  function goToPreviousQuestion() {
+    const previousAnswer = answers[answers.length - 1];
+    if (!previousAnswer) {
+      return;
+    }
+
+    setAnswers(answers.slice(0, -1));
+    setCurrentRound(previousAnswer.round);
+    setCurrentQuestionIndex(previousAnswer.question_index);
+    setCurrentQuestion(previousAnswer.question);
+    setTranscript(previousAnswer.answer);
+    setIsInterviewComplete(false);
+    setError("");
+  }
+
+  async function buildReport(reportAnswers = answers) {
     setIsGeneratingReport(true);
+    processingStartedAtRef.current = Date.now();
+    setElapsedSeconds(0);
     setError("");
     try {
-      const result = await generateReport(sessionId, answers);
+      const result = await generateReport(sessionId, toApiAnswers(reportAnswers));
       setReport(result);
       setScreen("report");
     } catch (reportError) {
@@ -222,7 +286,7 @@ export default function Home() {
                   Начать интервью
                 </button>
                 <span className="rounded-full bg-white/80 px-4 py-2 text-sm font-medium text-slate-600 shadow-sm ring-1 ring-slate-200">
-                  4 раунда · 12 вопросов · Markdown-отчёт
+                  7 вопросов · автоматический расчёт · Markdown-отчёт
                 </span>
               </div>
             </div>
@@ -346,6 +410,18 @@ export default function Home() {
                       </button>
                     )}
                     <button
+                      onClick={goToPreviousQuestion}
+                      disabled={
+                        answers.length === 0 ||
+                        isRecording ||
+                        isTranscribing ||
+                        isGeneratingQuestion
+                      }
+                      className="rounded-lg border border-slate-200 bg-white/70 px-5 py-3 font-semibold text-slate-700 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-white disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:translate-y-0"
+                    >
+                      Назад
+                    </button>
+                    <button
                       onClick={saveAnswerAndContinue}
                       disabled={isRecording || isTranscribing || isGeneratingQuestion}
                       className="rounded-lg border border-slate-200 bg-white/80 px-5 py-3 font-semibold text-slate-800 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-sky-200 hover:bg-white disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:translate-y-0"
@@ -358,6 +434,8 @@ export default function Home() {
                     isRecording={isRecording}
                     isTranscribing={isTranscribing}
                     isGeneratingQuestion={isGeneratingQuestion}
+                    isGeneratingReport={false}
+                    elapsedSeconds={elapsedSeconds}
                   />
 
                   <label className="mt-6 block text-sm font-medium text-slate-700">
@@ -380,13 +458,29 @@ export default function Home() {
                     Теперь можно сформировать итоговый Markdown-отчёт для
                     риэлтора.
                   </p>
-                  <button
-                    onClick={buildReport}
-                    disabled={isGeneratingReport}
-                    className="primary-action mt-6 rounded-lg px-6 py-3 font-semibold text-white transition duration-200 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
-                  >
-                    {isGeneratingReport ? "Формируем отчёт..." : "Сформировать отчёт"}
-                  </button>
+                  <div className="mt-6 flex flex-wrap gap-3">
+                    <button
+                      onClick={goToPreviousQuestion}
+                      disabled={isGeneratingReport || answers.length === 0}
+                      className="rounded-lg border border-slate-200 bg-white/80 px-5 py-3 font-semibold text-slate-800 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-white disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:translate-y-0"
+                    >
+                      Назад
+                    </button>
+                    <button
+                      onClick={() => buildReport()}
+                      disabled={isGeneratingReport}
+                      className="primary-action rounded-lg px-6 py-3 font-semibold text-white transition duration-200 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+                    >
+                      {isGeneratingReport ? "Формируем отчёт..." : "Сформировать отчёт"}
+                    </button>
+                  </div>
+                  <StatusLine
+                    isRecording={false}
+                    isTranscribing={false}
+                    isGeneratingQuestion={false}
+                    isGeneratingReport={isGeneratingReport}
+                    elapsedSeconds={elapsedSeconds}
+                  />
                 </div>
               )}
 
@@ -492,6 +586,7 @@ export default function Home() {
                   />
                 </div>
                 <LeadBadge lead={report.lead_score} />
+                <ToolResultsCard report={report} />
               </aside>
             </div>
           </section>
@@ -505,28 +600,83 @@ function StatusLine({
   isRecording,
   isTranscribing,
   isGeneratingQuestion,
+  isGeneratingReport,
+  elapsedSeconds,
 }: {
   isRecording: boolean;
   isTranscribing: boolean;
   isGeneratingQuestion: boolean;
+  isGeneratingReport: boolean;
+  elapsedSeconds: number;
 }) {
-  const message = isRecording
-    ? "Идёт запись..."
-    : isTranscribing
-      ? "Распознаём аудио..."
-      : isGeneratingQuestion
-        ? "Генерируем следующий вопрос..."
-        : "";
+  if (isRecording) {
+    return (
+      <p className="mt-4 rounded-lg border border-sky-100 bg-sky-50/90 p-3 text-sm font-semibold text-sky-800 shadow-sm">
+        Идёт запись...
+      </p>
+    );
+  }
 
-  if (!message) {
+  if (!isTranscribing && !isGeneratingQuestion && !isGeneratingReport) {
     return null;
   }
 
+  const activeIndex = isTranscribing
+    ? elapsedSeconds < 2
+      ? 0
+      : 1
+    : isGeneratingQuestion
+      ? elapsedSeconds < 2
+        ? 2
+        : 3
+      : 3;
+
+  const stages = [
+    "Аудио получено",
+    "Распознаём голос",
+    "Анализируем ответ",
+    isGeneratingReport ? "Формируем отчёт" : "Подбираем следующий вопрос",
+  ];
+
   return (
-    <p className="mt-4 rounded-lg border border-sky-100 bg-sky-50/90 p-3 text-sm font-semibold text-sky-800 shadow-sm">
-      {message}
-    </p>
+    <div className="mt-4 rounded-lg border border-sky-100 bg-sky-50/90 p-4 text-sm text-slate-700 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-semibold text-sky-900">{stages[activeIndex]}</p>
+        <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-semibold text-sky-800 ring-1 ring-sky-100">
+          {formatElapsed(elapsedSeconds)}
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-4">
+        {stages.map((stage, index) => (
+          <div
+            key={stage}
+            className={`rounded-lg border px-3 py-2 text-xs font-semibold ${
+              index <= activeIndex
+                ? "border-sky-200 bg-white text-sky-800"
+                : "border-slate-200 bg-white/50 text-slate-400"
+            }`}
+          >
+            {stage}
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 leading-6 text-slate-600">
+        Обычно это занимает 20–45 секунд на бесплатном сервере Hugging Face.
+      </p>
+      <p className="mt-1 leading-6 text-slate-500">
+        Первый ответ может занять дольше, потому что модель распознавания голоса
+        запускается после простоя.
+      </p>
+    </div>
   );
+}
+
+function formatElapsed(seconds: number) {
+  const minutes = Math.floor(seconds / 60)
+    .toString()
+    .padStart(2, "0");
+  const rest = (seconds % 60).toString().padStart(2, "0");
+  return `${minutes}:${rest}`;
 }
 
 function InfoRow({ label, value }: { label: string; value: string }) {
@@ -539,5 +689,300 @@ function InfoRow({ label, value }: { label: string; value: string }) {
         {value || "Не указано"}
       </p>
     </div>
+  );
+}
+
+function ToolResultsCard({ report }: { report: ReportResponse }) {
+  const usedTools = report.used_tools ?? [];
+  const toolResults = report.tool_results ?? {};
+  const entries = Object.entries(toolResults);
+  const successfulToolNames = usedTools.filter((toolName) =>
+    isToolSuccessStatus(toolResults[toolName]?.status),
+  );
+  const successfulEntries = entries.filter(([, result]) =>
+    isToolSuccessStatus(result.status),
+  );
+  const insufficientEntries = entries.filter(
+    ([, result]) => !isToolSuccessStatus(result.status),
+  );
+
+  return (
+    <div className="soft-card rounded-lg p-5">
+      <h3 className="font-semibold text-slate-950">Использованные инструменты</h3>
+      {successfulToolNames.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {successfulToolNames.map((toolName) => (
+            <span
+              key={toolName}
+              className="rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-800 ring-1 ring-teal-100"
+            >
+              {toolName}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 text-sm leading-6 text-slate-500">
+          Инструменты не использованы: недостаточно данных для расчётов.
+        </p>
+      )}
+
+      <div className="mt-4 space-y-3">
+        {successfulEntries.map(([toolName, result]) => (
+          <div
+            key={toolName}
+            className="rounded-lg border border-slate-100 bg-white/85 p-4 shadow-sm"
+          >
+            <p className="text-sm font-semibold text-slate-900">{toolName}</p>
+            <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Расчёт выполнен
+            </p>
+            <ToolSummary result={result} toolName={toolName} />
+          </div>
+        ))}
+      </div>
+
+      {insufficientEntries.length > 0 && (
+        <div className="mt-5 border-t border-slate-100 pt-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Недостаточно данных для расчёта
+          </p>
+          <div className="mt-3 space-y-3">
+            {insufficientEntries.map(([toolName, result]) => (
+              <div
+                key={toolName}
+                className="rounded-lg border border-slate-100 bg-slate-50/80 p-3"
+              >
+                <p className="text-sm font-semibold text-slate-800">{toolName}</p>
+                <ToolSummary result={result} toolName={toolName} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToolSummary({
+  result,
+  toolName,
+}: {
+  result: ToolResult;
+  toolName: string;
+}) {
+  const resolvedToolName = result.tool_name || toolName;
+
+  if (!isToolSuccessStatus(result.status)) {
+    return (
+      <div className="mt-2 space-y-2">
+        <p className="text-sm leading-6 text-slate-500">
+          {getToolDescription(resolvedToolName)}
+        </p>
+        <p className="text-sm leading-6 text-slate-600">
+          <span className="font-semibold text-slate-800">Недостаточно данных:</span>{" "}
+          {getInsufficientReason(resolvedToolName, result.reason)}
+        </p>
+      </div>
+    );
+  }
+
+  if (resolvedToolName === "Tax Estimator Tool") {
+    return (
+      <div className="mt-2 space-y-2">
+        <p className="text-sm leading-6 text-slate-500">
+          Ориентировочный расчёт налога на прибыль IRPF.
+        </p>
+        <p className="text-sm leading-6 text-slate-700">
+          Покупка: <span className="font-semibold text-slate-950">{formatMoney(result.purchase_price)}</span>{" "}
+          → продажа:{" "}
+          <span className="font-semibold text-slate-950">{formatMoney(result.sale_price)}</span>
+        </p>
+        <p className="text-sm leading-6 text-slate-700">
+          Прибыль:{" "}
+          <span className="font-semibold text-slate-950">
+            {formatMoney(result.estimated_capital_gain)}
+          </span>{" "}
+          · IRPF:{" "}
+          <span className="font-semibold text-slate-950">
+            {formatMoney(result.estimated_irpf)}
+          </span>
+        </p>
+        <p className="text-xs leading-5 text-slate-500">
+          Ориентировочная симуляция, не налоговая консультация.
+        </p>
+      </div>
+    );
+  }
+
+  if (resolvedToolName === "Barcelona Market Data Tool") {
+    return (
+      <div className="mt-2 space-y-2">
+        <p className="text-sm leading-6 text-slate-500">
+          Рыночное сравнение по району.
+        </p>
+        <p className="text-sm leading-6 text-slate-700">
+          Район:{" "}
+          <span className="font-semibold text-slate-950">
+            {formatTextValue(result.district)}
+          </span>
+        </p>
+        <p className="text-sm leading-6 text-slate-700">
+          Объект:{" "}
+          <span className="font-semibold text-slate-950">
+            {formatSquareMeterPrice(result.object_price_m2)}
+          </span>{" "}
+          · район:{" "}
+          <span className="font-semibold text-slate-950">
+            {formatSquareMeterPrice(result.district_avg_price_m2)}
+          </span>{" "}
+          · отклонение:{" "}
+          <span className="font-semibold text-slate-950">
+            {formatSignedPercent(result.deviation_percent)}
+          </span>
+        </p>
+        <p className="text-sm leading-6 text-slate-700">
+          Позиция:{" "}
+          <span className="font-semibold text-slate-950">
+            {formatMarketPosition(result.market_position)}
+          </span>
+        </p>
+        <p className="text-sm leading-6 text-slate-700">
+          Срок продажи:{" "}
+          <span className="font-semibold text-slate-950">
+            {formatTextValue(result.estimated_sale_time)}
+          </span>
+        </p>
+      </div>
+    );
+  }
+
+  if (resolvedToolName === "Rental Yield Analyzer") {
+    return (
+      <div className="mt-2 space-y-2">
+        <p className="text-sm leading-6 text-slate-500">
+          Анализ рентабельности аренды.
+        </p>
+        <p className="text-sm leading-6 text-slate-700">
+          Аренда:{" "}
+          <span className="font-semibold text-slate-950">
+            {formatMoney(result.monthly_rent)}/мес
+          </span>{" "}
+          · годовой доход:{" "}
+          <span className="font-semibold text-slate-950">
+            {formatMoney(result.annual_rent)}
+          </span>
+        </p>
+        <p className="text-sm leading-6 text-slate-700">
+          Доходность:{" "}
+          <span className="font-semibold text-slate-950">
+            {formatPercent(result.gross_yield_percent)}
+          </span>{" "}
+          · окупаемость:{" "}
+          <span className="font-semibold text-slate-950">
+            {formatNumber(result.payback_years)} лет
+          </span>
+        </p>
+        <p className="text-sm leading-6 text-slate-700">
+          Вывод:{" "}
+          <span className="font-semibold text-slate-950">
+            {formatYieldCategory(result.yield_category)}
+          </span>
+        </p>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+function getToolDescription(toolName: string) {
+  if (toolName === "Tax Estimator Tool") {
+    return "Ориентировочный расчёт налога на прибыль IRPF.";
+  }
+  if (toolName === "Barcelona Market Data Tool") {
+    return "Рыночное сравнение по району.";
+  }
+  if (toolName === "Rental Yield Analyzer") {
+    return "Анализ рентабельности аренды.";
+  }
+  return "Расчёт по данным интервью.";
+}
+
+function getInsufficientReason(toolName: string, reason?: string) {
+  if (toolName === "Rental Yield Analyzer") {
+    return "не указана предполагаемая месячная аренда.";
+  }
+  return reason || "недостаточно данных для расчёта.";
+}
+
+function isToolSuccessStatus(status: string | undefined) {
+  return status === "success" || status === "calculation_completed";
+}
+
+function formatMoney(value: string | number | null | undefined) {
+  if (typeof value !== "number") {
+    return "н/д";
+  }
+  return `${Math.round(value).toLocaleString("ru-RU")} €`;
+}
+
+function formatSquareMeterPrice(value: string | number | null | undefined) {
+  if (typeof value !== "number") {
+    return "н/д";
+  }
+  return `${Math.round(value).toLocaleString("ru-RU")} €/м²`;
+}
+
+function formatPercent(value: string | number | null | undefined) {
+  if (typeof value !== "number") {
+    return "н/д";
+  }
+  return `${value.toLocaleString("ru-RU", {
+    maximumFractionDigits: 2,
+  })}%`;
+}
+
+function formatSignedPercent(value: string | number | null | undefined) {
+  if (typeof value !== "number") {
+    return "н/д";
+  }
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${formatPercent(value)}`;
+}
+
+function formatNumber(value: string | number | null | undefined) {
+  if (typeof value !== "number") {
+    return "н/д";
+  }
+  return value.toLocaleString("ru-RU", {
+    maximumFractionDigits: 1,
+  });
+}
+
+function formatTextValue(value: string | number | null | undefined) {
+  if (value === null || value === undefined || value === "") {
+    return "н/д";
+  }
+  return String(value);
+}
+
+function formatMarketPosition(value: string | number | null | undefined) {
+  return (
+    {
+      below_market: "ниже рынка",
+      near_market: "около рынка",
+      above_market: "выше рынка",
+      strongly_above_market: "сильно выше рынка",
+    }[String(value)] || formatTextValue(value)
+  );
+}
+
+function formatYieldCategory(value: string | number | null | undefined) {
+  return (
+    {
+      low: "низкая доходность",
+      medium: "средняя доходность",
+      high: "высокая доходность",
+    }[String(value)] || formatTextValue(value)
   );
 }

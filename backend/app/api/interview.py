@@ -11,6 +11,7 @@ from app.models.schemas import (
 )
 from app.services.llm_service import (
     BASE_QUESTIONS,
+    LAST_QUESTION_INDEX,
     MAX_ROUNDS,
     TOTAL_QUESTIONS,
     get_next_position,
@@ -30,7 +31,7 @@ async def next_question(payload: NextQuestionRequest) -> NextQuestionResponse:
         return NextQuestionResponse(
             question="",
             round=MAX_ROUNDS,
-            question_index=2,
+            question_index=LAST_QUESTION_INDEX,
             is_finished=True,
         )
 
@@ -64,7 +65,7 @@ async def generate_report(payload: GenerateReportRequest) -> GenerateReportRespo
             "session_id": payload.session_id,
             "answers": payload.answers,
             "current_round": MAX_ROUNDS,
-            "current_question_index": 2,
+            "current_question_index": LAST_QUESTION_INDEX,
             "force_final_report": True,
         }
     )

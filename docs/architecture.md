@@ -53,14 +53,40 @@ Graph state includes:
 - `round_summary`
 - `next_question`
 - `final_report`
+- `used_tools`
+- `tool_results`
 
 Nodes:
 
 - `analyze_answers`
 - `generate_next_question`
+- `run_agent_tools`
 - `generate_final_report`
 
-The graph first analyzes answers, then routes either to the next question node or the final report node. The graph is deliberately small so students can understand it quickly.
+The graph first analyzes answers, then routes either to the next question node or the final report path. On the final path, `run_agent_tools` evaluates the collected answers and runs only the tools that have enough context. The graph is deliberately small so students can understand it quickly.
+
+## Agent Tools
+
+v2 adds three backend agent tools as separate services:
+
+- Tax Estimator Tool: approximate Spanish IRPF simulation for property sales. It is not legal or tax advice and plusvalía municipal is separate.
+- Barcelona Market Data Tool: compares the expected sale price against a local MVP dataset in `backend/data/barcelona_market_data.json`.
+- Rental Yield Analyzer: estimates gross rental yield and payback period.
+
+The frontend does not decide when tools run. The backend tool router extracts context from answers and decides which tools to call. If data is missing, tools return `insufficient_data` and the report does not invent numbers.
+
+The Barcelona market data file is a local MVP dataset, not live valuation data. It should be updated from official/open data sources before production use.
+
+## Waiting UX
+
+Whisper Small can be slow on free Hugging Face CPU. The frontend keeps the existing interview flow but shows clearer stages:
+
+- Audio received
+- Voice recognition
+- Answer analysis
+- Next question selection
+
+It also displays a timer and explains that the first request can be slower because the speech model loads after idle periods.
 
 ## Fallback Mode
 
@@ -75,12 +101,22 @@ This makes the project stable for classroom demos.
 
 ## Interview Flow
 
-The MVP interview has 4 rounds with 3 questions each:
+The public course version defaults to a short 7-question demo flow. It is designed to trigger the v2 agent tools quickly during a live presentation:
+
+- name
+- phone or email
+- Barcelona district
+- apartment area
+- purchase price
+- planned sale price
+- expected monthly rent
+
+The full production-style interview is preserved in code and can be restored with `INTERVIEW_MODE=full` on the backend and `NEXT_PUBLIC_INTERVIEW_MODE=full` on the frontend. It has 4 rounds with 3 questions each:
 
 - Contact details
-- Object details
-- Reason for selling or renting
-- Expectations and concerns
+- Object details: Barcelona district, property type, condition, area, and rooms
+- Sale data: sale/rent/both intent, purchase price, and planned sale price
+- Rental, expectations, and circumstances: monthly rent, priorities, mortgage, tenants, inheritance, renovation, or urgency
 
 ## MVP Limitations
 

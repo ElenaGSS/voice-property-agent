@@ -38,4 +38,13 @@ export type ReportResponse = {
   client_card: ClientCard;
   lead_score: LeadScore;
   markdown_report: string;
+  used_tools?: string[];
+  tool_results?: Record<string, ToolResult>;
+};
+
+export type ToolResult = {
+  tool_name?: string;
+  status?: "success" | "calculation_completed" | "insufficient_data" | string;
+  reason?: string;
+  [key: string]: string | number | null | undefined;
 };

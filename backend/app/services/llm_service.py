@@ -9,32 +9,51 @@ from app.models.schemas import AnswerItem, ClientCard, LeadScore
 logger = logging.getLogger(__name__)
 
 
-BASE_QUESTIONS: dict[int, list[str]] = {
+SUCCESS_TOOL_STATUSES = {"success", "calculation_completed"}
+
+DEMO_INTERVIEW_QUESTIONS: dict[int, list[str]] = {
+    1: [
+        "Как вас зовут?",
+        "Какой телефон или email удобен для связи?",
+        "В каком районе Барселоны находится квартира? Например: Гинардо, Эшампле, Грасия, Сан Андреу, Сантс, Лес Кортс.",
+        "Какая площадь квартиры в м²?",
+        "За сколько вы покупали квартиру?",
+        "За сколько вы планируете продавать квартиру?",
+        "Какая предполагаемая стоимость месячной аренды?",
+    ],
+}
+
+FULL_INTERVIEW_QUESTIONS: dict[int, list[str]] = {
     1: [
         "Как вас зовут?",
         "Какой телефон или email удобен для связи?",
         "Вы единственный собственник объекта или есть другие собственники?",
     ],
     2: [
-        "Где находится объект?",
-        "Какой тип недвижимости?",
-        "Опишите объект своими словами.",
+        "В каком районе Барселоны находится объект?",
+        "Какой это объект: квартира, дом, помещение? В каком он состоянии?",
+        "Какая площадь объекта в м² и сколько комнат?",
     ],
     3: [
-        "Что вы хотите сделать: продать или сдать?",
-        "Почему приняли это решение?",
-        "Какие особенности объекта важно учитывать?",
+        "Что вы рассматриваете: продажу, аренду или оба варианта?",
+        "За сколько вы покупали объект? Если не помните точно, укажите примерно.",
+        "За сколько вы планируете продавать объект?",
     ],
     4: [
-        "Какую цену или арендную плату вы ожидаете?",
-        "Что для вас важно при работе с агентом?",
-        "Есть ли вопросы или опасения по процессу?",
+        "Какая предполагаемая стоимость месячной аренды?",
+        "Что для вас сейчас важнее: продать быстрее, получить максимальную цену, понять налоги или проконсультироваться по аренде?",
+        "Есть ли важные обстоятельства: ипотека, арендаторы, наследство, ремонт, срочность или другие вопросы?",
     ],
 }
 
+INTERVIEW_MODE = os.getenv("INTERVIEW_MODE", "demo").strip().lower()
+BASE_QUESTIONS = (
+    FULL_INTERVIEW_QUESTIONS if INTERVIEW_MODE == "full" else DEMO_INTERVIEW_QUESTIONS
+)
 MAX_ROUNDS = len(BASE_QUESTIONS)
-QUESTIONS_PER_ROUND = 3
-TOTAL_QUESTIONS = MAX_ROUNDS * QUESTIONS_PER_ROUND
+QUESTIONS_PER_ROUND = max(len(questions) for questions in BASE_QUESTIONS.values())
+TOTAL_QUESTIONS = sum(len(questions) for questions in BASE_QUESTIONS.values())
+LAST_QUESTION_INDEX = len(BASE_QUESTIONS[MAX_ROUNDS]) - 1
 
 
 def _answers_text(answers: list[AnswerItem]) -> str:
@@ -69,20 +88,30 @@ def _infer_goal(answers: list[AnswerItem]) -> str:
         return "Аренда"
     if any(word in text for word in ["продать", "продажа", "продаю", "сделка"]):
         return "Продажа"
-    return _find_by_question(answers, ["продать", "сдать", "хотите сделать"])
+    fallback = _find_by_question(answers, ["продать", "сдать", "хотите сделать", "рассматриваете"])
+    if fallback == "Не указано" and INTERVIEW_MODE != "full":
+        return "Продажа + возможная аренда"
+    return fallback
 
 
 def _build_client_card(answers: list[AnswerItem]) -> ClientCard:
+    property_type = _find_by_question(answers, ["тип недвижимости", "какой это объект"])
+    if property_type == "Не указано" and INTERVIEW_MODE != "full":
+        property_type = "Квартира"
+
     return ClientCard(
         name=_find_by_question(answers, ["как вас зовут", "имя"]),
         contact=_find_by_question(answers, ["телефон", "email", "связи"]),
         ownership_status=_find_by_question(
             answers, ["единственный собственник", "другие собственники", "собственники"]
         ),
-        property_type=_find_by_question(answers, ["тип недвижимости"]),
+        property_type=property_type,
         location=_find_by_question(answers, ["где находится", "локац", "адрес", "район"]),
         goal=_infer_goal(answers),
-        expected_price=_find_by_question(answers, ["цену", "арендную плату", "ожидаете"]),
+        expected_price=_find_by_question(
+            answers,
+            ["цену", "арендную плату", "ожидаете", "планируете продавать", "стоимость месячной аренды"],
+        ),
     )
 
 
@@ -145,14 +174,19 @@ def generate_adaptive_question(
     answers: list[AnswerItem], current_round: int, current_question_index: int
 ) -> str:
     next_round, next_index = get_next_position(current_round, current_question_index)
-    if next_round > MAX_ROUNDS:
+    if next_round > MAX_ROUNDS or next_index >= len(BASE_QUESTIONS.get(next_round, [])):
         return ""
+
+    if INTERVIEW_MODE != "full":
+        return _fallback_adaptive_question(answers, next_round, next_index)
 
     if _has_openai_key():
         prompt = (
             "Ты ассистент риэлтора. Сгенерируй один короткий следующий вопрос для интервью "
             "собственника недвижимости на русском. Вопрос должен соответствовать текущему этапу "
-            f"Раунд {next_round}, вопрос {next_index + 1}. Не добавляй пояснений.\n\n"
+            f"Раунд {next_round}, вопрос {next_index + 1}. Сохрани обязательную цель базового вопроса: "
+            "если он просит район, площадь, цену покупки, цену продажи или арендную плату, обязательно спроси именно это. "
+            "Не добавляй пояснений.\n\n"
             f"Базовый вопрос: {BASE_QUESTIONS[next_round][next_index]}\n\n"
             f"Ответы:\n{_answers_text(answers)}"
         )
@@ -163,9 +197,15 @@ def generate_adaptive_question(
     return _fallback_adaptive_question(answers, next_round, next_index)
 
 
-def generate_report(answers: list[AnswerItem]) -> dict[str, Any]:
+def generate_report(
+    answers: list[AnswerItem],
+    used_tools: list[str] | None = None,
+    tool_results: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     client_card = _build_client_card(answers)
     lead_score = _score_lead(answers)
+    used_tools = used_tools or []
+    tool_results = tool_results or {}
 
     if _has_openai_key():
         prompt = (
@@ -173,26 +213,34 @@ def generate_report(answers: list[AnswerItem]) -> dict[str, Any]:
             "Обязательно добавь раздел '## Контактные данные' с полями Имя, "
             "Телефон / email, Собственники. Затем добавь карточку клиента, мотивацию, "
             "ожидания, опасения и рекомендованные следующие шаги. Пиши на русском.\n\n"
-            f"{_answers_text(answers)}"
+            f"{_answers_text(answers)}\n\n"
+            f"Результаты agent tools:\n{json.dumps(tool_results, ensure_ascii=False, indent=2)}"
         )
         llm_report = _call_openai_text(prompt)
         if llm_report:
+            markdown_report = _ensure_contact_section(llm_report, client_card)
+            markdown_report = _append_tool_sections(markdown_report, used_tools, tool_results)
             return {
                 "client_card": client_card,
                 "lead_score": lead_score,
-                "markdown_report": _ensure_contact_section(llm_report, client_card),
+                "markdown_report": markdown_report,
+                "used_tools": used_tools,
+                "tool_results": tool_results,
             }
 
-    markdown = _fallback_markdown_report(answers, client_card, lead_score)
+    markdown = _fallback_markdown_report(answers, client_card, lead_score, used_tools, tool_results)
     return {
         "client_card": client_card,
         "lead_score": lead_score,
         "markdown_report": markdown,
+        "used_tools": used_tools,
+        "tool_results": tool_results,
     }
 
 
 def get_next_position(current_round: int, current_question_index: int) -> tuple[int, int]:
-    if current_question_index < QUESTIONS_PER_ROUND - 1:
+    current_questions = BASE_QUESTIONS.get(current_round, [])
+    if current_question_index < len(current_questions) - 1:
         return current_round, current_question_index + 1
     return current_round + 1, 0
 
@@ -200,36 +248,15 @@ def get_next_position(current_round: int, current_question_index: int) -> tuple[
 def _fallback_adaptive_question(
     answers: list[AnswerItem], next_round: int, next_index: int
 ) -> str:
-    base_question = BASE_QUESTIONS[next_round][next_index]
-    text = _combined_answers(answers)
-
-    if next_round == 3 and next_index == 1:
-        if any(word in text for word in ["срочно", "быстро", "переезд"]):
-            return "Какой срок продажи или сдачи для вас был бы комфортным?"
-        if any(word in text for word in ["сдана", "сдан", "арендатор", "договор"]):
-            return "На какой срок сейчас действует договор аренды и есть ли ограничения для показа объекта?"
-
-    if next_round == 3 and next_index == 2:
-        if "ремонт" in text:
-            return "Что по ремонту важно подчеркнуть агенту при презентации объекта?"
-        if "ипотек" in text or "обремен" in text:
-            return "Есть ли юридические или финансовые ограничения, которые агент должен учесть заранее?"
-
-    if next_round == 4 and next_index == 1:
-        if any(word in text for word in ["комисс", "оплат", "дорого"]):
-            return "Какой формат комиссии или оплаты услуг был бы для вас комфортным?"
-        if any(word in text for word in ["срочно", "быстро"]):
-            return "Что для вас важнее: максимальная цена или скорость сделки?"
-
-    if next_round == 4 and next_index == 2:
-        if any(word in text for word in ["боюсь", "опас", "сомнен", "комисс"]):
-            return "Какие условия сотрудничества помогли бы вам чувствовать себя спокойнее?"
-
-    return base_question
+    return BASE_QUESTIONS[next_round][next_index]
 
 
 def _fallback_markdown_report(
-    answers: list[AnswerItem], client_card: ClientCard, lead_score: LeadScore
+    answers: list[AnswerItem],
+    client_card: ClientCard,
+    lead_score: LeadScore,
+    used_tools: list[str],
+    tool_results: dict[str, dict[str, Any]],
 ) -> str:
     answer_lines = "\n".join(
         f"- **{item.question}**\n  {item.answer or 'Не указано'}" for item in answers
@@ -262,6 +289,8 @@ def _fallback_markdown_report(
 
 {answer_lines}
 
+{_render_tool_sections(used_tools, tool_results)}
+
 ## Рекомендованные следующие шаги
 
 1. Уточнить документы и готовность собственника к встрече.
@@ -285,6 +314,115 @@ def _ensure_contact_section(markdown: str, client_card: ClientCard) -> str:
     if lines and lines[0].startswith("# "):
         return "\n".join([lines[0], contact_section, *lines[1:]])
     return contact_section + "\n" + markdown
+
+
+def _append_tool_sections(
+    markdown: str,
+    used_tools: list[str],
+    tool_results: dict[str, dict[str, Any]],
+) -> str:
+    if "## Использованные инструменты" in markdown:
+        return markdown
+    return markdown.rstrip() + "\n\n" + _render_tool_sections(used_tools, tool_results)
+
+
+def _render_tool_sections(
+    used_tools: list[str],
+    tool_results: dict[str, dict[str, Any]],
+) -> str:
+    lines: list[str] = ["## Использованные инструменты", ""]
+    if used_tools:
+        lines.extend(f"- {tool_name}" for tool_name in used_tools)
+    else:
+        lines.append("- Инструменты не использованы: недостаточно данных для расчётов.")
+
+    tax = tool_results.get("Tax Estimator Tool")
+    if tax:
+        lines.extend(["", "## Ориентировочный налоговый расчёт", ""])
+        if _is_tool_success(tax):
+            lines.extend(
+                [
+                    f"- **Ориентировочная прибыль:** {_format_eur(tax.get('estimated_capital_gain'))}",
+                    f"- **Ориентировочный IRPF sobre ganancia patrimonial:** {_format_eur(tax.get('estimated_irpf'))}",
+                    f"- **Цена продажи:** {_format_eur(tax.get('sale_price'))}",
+                    f"- **Цена покупки:** {_format_eur(tax.get('purchase_price'))}",
+                    f"- **Расходы / ремонт:** {_format_eur(tax.get('deductible_expenses'))}",
+                    f"- {tax.get('disclaimer')}",
+                ]
+            )
+        else:
+            lines.append(f"- Недостаточно данных для расчёта. {tax.get('reason', '')}".strip())
+
+    market = tool_results.get("Barcelona Market Data Tool")
+    if market:
+        lines.extend(["", "## Рыночное сравнение по району", ""])
+        if _is_tool_success(market):
+            lines.extend(
+                [
+                    f"- **Район:** {market.get('district')}",
+                    f"- **Цена объекта:** {_format_eur_m2(market.get('object_price_m2'))}",
+                    f"- **Средняя цена района:** {_format_eur_m2(market.get('district_avg_price_m2'))}",
+                    f"- **Отклонение:** {market.get('deviation_percent')}%",
+                    f"- **Позиция:** {_market_position_label(str(market.get('market_position')))}",
+                    f"- {market.get('disclaimer')}",
+                    "",
+                    "## Оценка срока продажи",
+                    "",
+                    f"- **Ориентировочный срок:** {market.get('estimated_sale_time')}",
+                ]
+            )
+        else:
+            lines.append(f"- Недостаточно данных для сравнения. {market.get('reason', '')}".strip())
+
+    rental = tool_results.get("Rental Yield Analyzer")
+    if rental:
+        lines.extend(["", "## Анализ рентабельности аренды", ""])
+        if _is_tool_success(rental):
+            lines.extend(
+                [
+                    f"- **Годовой арендный доход:** {_format_eur(rental.get('annual_rent'))}",
+                    f"- **Валовая доходность:** {rental.get('gross_yield_percent')}%",
+                    f"- **Окупаемость:** {rental.get('payback_years')} лет",
+                    f"- **Вывод:** {_yield_category_label(str(rental.get('yield_category')))}",
+                ]
+            )
+        else:
+            lines.append(f"- Недостаточно данных для расчёта. {rental.get('reason', '')}".strip())
+
+    return "\n".join(lines)
+
+
+def _is_tool_success(result: dict[str, Any]) -> bool:
+    return result.get("status") in SUCCESS_TOOL_STATUSES
+
+
+def _format_eur(value: Any) -> str:
+    if isinstance(value, int | float):
+        return f"{value:,.0f} €".replace(",", " ")
+    return "Недостаточно данных"
+
+
+def _format_eur_m2(value: Any) -> str:
+    if isinstance(value, int | float):
+        return f"{value:,.0f} €/м²".replace(",", " ")
+    return "Недостаточно данных"
+
+
+def _market_position_label(value: str) -> str:
+    return {
+        "below_market": "ниже рынка",
+        "near_market": "около рынка",
+        "above_market": "выше рынка",
+        "strongly_above_market": "значительно выше рынка",
+    }.get(value, value)
+
+
+def _yield_category_label(value: str) -> str:
+    return {
+        "low": "низкая доходность",
+        "medium": "средняя доходность",
+        "high": "высокая доходность",
+    }.get(value, value)
 
 
 def _has_openai_key() -> bool:

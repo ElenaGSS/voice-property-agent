@@ -1,0 +1,105 @@
+{
+  "updated_at": "2026-06-16",
+  "currency": "EUR",
+  "unit": "price_per_m2",
+  "source_note": "MVP local market dataset based on public/open market references. Not live valuation. Should be updated from official/open data sources.",
+  "districts": [
+    {
+      "district": "Eixample",
+      "aliases": ["Eixample", "L'Eixample", "Эшампле", "Эйшампле", "Ensanche"],
+      "avg_price_m2": 6100,
+      "source_note": "Approximate MVP local benchmark, not live market data.",
+      "updated_at": "2026-06-16",
+      "confidence": "medium"
+    },
+    {
+      "district": "Gràcia",
+      "aliases": ["Gràcia", "Gracia", "Грасия", "Грасиа"],
+      "avg_price_m2": 5400,
+      "source_note": "Approximate MVP local benchmark, not live market data.",
+      "updated_at": "2026-06-16",
+      "confidence": "medium"
+    },
+    {
+      "district": "Horta-Guinardó",
+      "aliases": [
+        "Horta-Guinardó",
+        "Horta Guinardó",
+        "Horta Guinardo",
+        "Guinardó",
+        "Guinardo",
+        "El Guinardó",
+        "El Guinardo",
+        "Гинардо",
+        "Орта-Гинардо",
+        "Орта Гинардо"
+      ],
+      "avg_price_m2": 3800,
+      "source_note": "Approximate MVP local benchmark, not live market data.",
+      "updated_at": "2026-06-16",
+      "confidence": "medium"
+    },
+    {
+      "district": "Sant Martí",
+      "aliases": ["Sant Martí", "Sant Marti", "Сант Марти", "Poblenou", "Diagonal Mar"],
+      "avg_price_m2": 4700,
+      "source_note": "Approximate MVP local benchmark, not live market data.",
+      "updated_at": "2026-06-16",
+      "confidence": "medium"
+    },
+    {
+      "district": "Sants-Montjuïc",
+      "aliases": ["Sants-Montjuïc", "Sants Montjuic", "Sants-Montjuic", "Сантс", "Монжуик"],
+      "avg_price_m2": 4300,
+      "source_note": "Approximate MVP local benchmark, not live market data.",
+      "updated_at": "2026-06-16",
+      "confidence": "medium"
+    },
+    {
+      "district": "Les Corts",
+      "aliases": ["Les Corts", "Лес Кортс"],
+      "avg_price_m2": 5900,
+      "source_note": "Approximate MVP local benchmark, not live market data.",
+      "updated_at": "2026-06-16",
+      "confidence": "medium"
+    },
+    {
+      "district": "Sarrià-Sant Gervasi",
+      "aliases": [
+        "Sarrià-Sant Gervasi",
+        "Sarria Sant Gervasi",
+        "Sarria-Sant Gervasi",
+        "Саррия",
+        "Сант Жерваси"
+      ],
+      "avg_price_m2": 7200,
+      "source_note": "Approximate MVP local benchmark, not live market data.",
+      "updated_at": "2026-06-16",
+      "confidence": "medium"
+    },
+    {
+      "district": "Nou Barris",
+      "aliases": ["Nou Barris", "Ноу Баррис"],
+      "avg_price_m2": 2900,
+      "source_note": "Approximate MVP local benchmark, not live market data.",
+      "updated_at": "2026-06-16",
+      "confidence": "medium"
+    },
+    {
+      "district": "Ciutat Vella",
+      "aliases": ["Ciutat Vella", "Сьютат Велья", "Gotic", "Gòtic", "Raval", "Born", "Barceloneta"],
+      "avg_price_m2": 5200,
+      "source_note": "Approximate MVP local benchmark, not live market data.",
+      "updated_at": "2026-06-16",
+      "confidence": "medium"
+    },
+    {
+      "district": "Sant Andreu",
+      "aliases": ["Sant Andreu", "Сант Андреу"],
+      "avg_price_m2": 3600,
+      "source_note": "Approximate MVP local benchmark, not live market data.",
+      "updated_at": "2026-06-16",
+      "confidence": "medium"
+    }
+  ]
+}
