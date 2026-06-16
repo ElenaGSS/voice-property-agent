@@ -16,7 +16,7 @@ FALLBACK_DATASET: dict[str, Any] = {
     "districts": [
         {
             "district": "Eixample",
-            "aliases": ["Eixample", "L'Eixample", "Эшампле", "Эйшампле", "Ensanche"],
+            "aliases": ["Eixample", "L'Eixample", "Эшампле", "Эйшампле", "Ешампле", "Ensanche"],
             "avg_price_m2": 6100,
             "confidence": "low",
             "source_note": FALLBACK_SOURCE_NOTE,
@@ -51,7 +51,7 @@ FALLBACK_DATASET: dict[str, Any] = {
         },
         {
             "district": "Sant Martí",
-            "aliases": ["Sant Martí", "Sant Marti", "Сант Марти", "Poblenou", "Diagonal Mar"],
+            "aliases": ["Sant Martí", "Sant Marti", "Сан Марти", "Сант Марти", "Poblenou", "Diagonal Mar"],
             "avg_price_m2": 4700,
             "confidence": "low",
             "source_note": FALLBACK_SOURCE_NOTE,
@@ -99,7 +99,7 @@ FALLBACK_DATASET: dict[str, Any] = {
         },
         {
             "district": "Sant Andreu",
-            "aliases": ["Sant Andreu", "Сант Андреу"],
+            "aliases": ["Sant Andreu", "Сан Андреу", "Сант Андреу"],
             "avg_price_m2": 3600,
             "confidence": "low",
             "source_note": FALLBACK_SOURCE_NOTE,
@@ -199,7 +199,7 @@ def _normalize(value: str) -> str:
     lowered = value.lower().replace("ё", "е")
     decomposed = unicodedata.normalize("NFKD", lowered)
     without_accents = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
-    without_dashes = re.sub(r"[-‐‑‒–—―]", " ", without_accents)
+    without_dashes = re.sub(r"[-‐‑‒–—―'’`´]", " ", without_accents)
     return re.sub(r"\s+", " ", without_dashes).strip()
 
 

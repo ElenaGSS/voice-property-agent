@@ -6,7 +6,7 @@
   "districts": [
     {
       "district": "Eixample",
-      "aliases": ["Eixample", "L'Eixample", "Эшампле", "Эйшампле", "Ensanche"],
+      "aliases": ["Eixample", "L'Eixample", "Эшампле", "Эйшампле", "Ешампле", "Ensanche"],
       "avg_price_m2": 6100,
       "source_note": "Approximate MVP local benchmark, not live market data.",
       "updated_at": "2026-06-16",
@@ -41,7 +41,7 @@
     },
     {
       "district": "Sant Martí",
-      "aliases": ["Sant Martí", "Sant Marti", "Сант Марти", "Poblenou", "Diagonal Mar"],
+      "aliases": ["Sant Martí", "Sant Marti", "Сан Марти", "Сант Марти", "Poblenou", "Diagonal Mar"],
       "avg_price_m2": 4700,
       "source_note": "Approximate MVP local benchmark, not live market data.",
       "updated_at": "2026-06-16",
@@ -95,7 +95,7 @@
     },
     {
       "district": "Sant Andreu",
-      "aliases": ["Sant Andreu", "Сант Андреу"],
+      "aliases": ["Sant Andreu", "Сан Андреу", "Сант Андреу"],
       "avg_price_m2": 3600,
       "source_note": "Approximate MVP local benchmark, not live market data.",
       "updated_at": "2026-06-16",

@@ -13,6 +13,7 @@ const INTERVIEW_MODE =
   process.env.NEXT_PUBLIC_INTERVIEW_MODE === "full" ? "full" : "demo";
 const TOTAL_QUESTIONS = INTERVIEW_MODE === "full" ? 12 : 7;
 const DEMO_RECORDING_LIMIT_MS = 12_000;
+const TRANSCRIBE_TIMEOUT_MS = 45_000;
 const INVALID_CONTACT_MESSAGE =
   "Номер распознан некорректно. Введите вручную или повторите запись.";
 const FIRST_QUESTION = "Как вас зовут?";
@@ -67,6 +68,11 @@ export default function Home() {
   const streamRef = useRef<MediaStream | null>(null);
   const processingStartedAtRef = useRef<number | null>(null);
   const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const transcribeAbortControllerRef = useRef<AbortController | null>(null);
+  const transcribeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const transcribeAbortReasonRef = useRef<"manual" | "timeout" | "silent" | null>(
+    null,
+  );
 
   const progressLabel = useMemo(
     () => `${answers.length + (isInterviewComplete ? 0 : 1)} / ${TOTAL_QUESTIONS}`,
@@ -109,6 +115,7 @@ export default function Home() {
     setReport(null);
     setIsInterviewComplete(false);
     clearRecordingTimeout();
+    cancelActiveTranscription(false);
   }
 
   async function startRecording() {
@@ -171,24 +178,67 @@ export default function Home() {
     processingStartedAtRef.current = Date.now();
     setElapsedSeconds(0);
     setError("");
+    const abortController = new AbortController();
+    transcribeAbortControllerRef.current = abortController;
+    transcribeAbortReasonRef.current = null;
+    transcribeTimeoutRef.current = setTimeout(() => {
+      transcribeAbortReasonRef.current = "timeout";
+      abortController.abort();
+    }, TRANSCRIBE_TIMEOUT_MS);
+
     try {
-      const text = await transcribeAudio(audioBlob, currentQuestion);
+      const text = await transcribeAudio(
+        audioBlob,
+        currentQuestion,
+        abortController.signal,
+      );
       setTranscript(text);
     } catch (transcriptionError) {
       if (
         transcriptionError instanceof Error &&
-        transcriptionError.message === "TRANSCRIBE_TIMEOUT"
+        transcriptionError.message === "TRANSCRIBE_ABORTED"
       ) {
-        setError(
-          "Распознавание заняло слишком много времени. Можно повторить запись или ввести ответ вручную.",
-        );
+        if (transcribeAbortReasonRef.current === "timeout") {
+          setError(
+            "Распознавание заняло слишком много времени. Повторите запись или введите ответ вручную.",
+          );
+        } else if (transcribeAbortReasonRef.current === "manual") {
+          setError("Распознавание отменено. Можно повторить запись или ввести ответ вручную.");
+        }
       } else {
         setError(
           "Сервер не смог обработать аудио. Можно включить демонстрационный режим распознавания или ввести ответ вручную.",
         );
       }
     } finally {
+      clearTranscribeTimeout();
+      transcribeAbortControllerRef.current = null;
+      transcribeAbortReasonRef.current = null;
+      processingStartedAtRef.current = null;
+      setElapsedSeconds(0);
       setIsTranscribing(false);
+    }
+  }
+
+  function cancelActiveTranscription(showMessage = true) {
+    if (!transcribeAbortControllerRef.current) {
+      return;
+    }
+    transcribeAbortReasonRef.current = showMessage ? "manual" : "silent";
+    transcribeAbortControllerRef.current.abort();
+    clearTranscribeTimeout();
+    processingStartedAtRef.current = null;
+    setElapsedSeconds(0);
+    setIsTranscribing(false);
+    if (showMessage) {
+      setError("Распознавание отменено. Можно повторить запись или ввести ответ вручную.");
+    }
+  }
+
+  function clearTranscribeTimeout() {
+    if (transcribeTimeoutRef.current) {
+      clearTimeout(transcribeTimeoutRef.current);
+      transcribeTimeoutRef.current = null;
     }
   }
 
@@ -202,12 +252,17 @@ export default function Home() {
       return;
     }
 
+    const cleanedTranscript = cleanAnswerBeforeSave(transcript);
+    if (!cleanedTranscript) {
+      setError("Добавьте ответ: запишите аудио или введите текст вручную.");
+      return;
+    }
     const updatedAnswers = [
       ...answers,
       {
         round: currentRound,
         question: currentQuestion,
-        answer: transcript.trim(),
+        answer: cleanedTranscript,
         question_index: currentQuestionIndex,
       },
     ];
@@ -469,6 +524,14 @@ export default function Home() {
                     >
                       Сохранить ответ и продолжить
                     </button>
+                    {isTranscribing && (
+                      <button
+                        onClick={() => cancelActiveTranscription()}
+                        className="rounded-lg border border-amber-200 bg-amber-50 px-5 py-3 font-semibold text-amber-800 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-amber-100"
+                      >
+                        Отменить распознавание
+                      </button>
+                    )}
                   </div>
                   {INTERVIEW_MODE === "demo" && (
                     <p className="mt-3 text-sm leading-6 text-slate-500">
@@ -1038,4 +1101,8 @@ function formatYieldCategory(value: string | number | null | undefined) {
       high: "высокая доходность",
     }[String(value)] || formatTextValue(value)
   );
+}
+
+function cleanAnswerBeforeSave(value: string) {
+  return value.trim().replace(/[\s.,!?;:]+$/g, "").trim();
 }

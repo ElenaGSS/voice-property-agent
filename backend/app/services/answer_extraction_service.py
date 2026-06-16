@@ -9,16 +9,16 @@ from app.models.schemas import AnswerItem
 
 DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "barcelona_market_data.json"
 DISTRICT_ALIASES: dict[str, list[str]] = {
-    "Eixample": ["eixample", "ensanche"],
+    "Eixample": ["eixample", "l'eixample", "эшампле", "эйшампле", "ешампле", "ensanche"],
     "Gràcia": ["gracia", "gràcia"],
     "Horta-Guinardó": ["horta-guinardo", "horta-guinardó", "guinardo", "guinardó", "horta"],
-    "Sant Martí": ["sant marti", "sant martí", "poblenou", "diagonal mar"],
+    "Sant Martí": ["sant marti", "sant martí", "сан марти", "сант марти", "poblenou", "diagonal mar"],
     "Sants-Montjuïc": ["sants-montjuic", "sants-montjuïc", "sants", "montjuic", "montjuïc"],
     "Les Corts": ["les corts"],
     "Sarrià-Sant Gervasi": ["sarria", "sarrià", "sant gervasi", "sarria-sant gervasi", "sarrià-sant gervasi"],
     "Nou Barris": ["nou barris"],
     "Ciutat Vella": ["ciutat vella", "gotic", "gòtic", "raval", "born", "barceloneta"],
-    "Sant Andreu": ["sant andreu"],
+    "Sant Andreu": ["sant andreu", "сан андреу", "сант андреу"],
 }
 
 PURCHASE_QUESTION_MARKERS = [
@@ -349,7 +349,7 @@ def _normalize(value: str) -> str:
     lowered = value.lower().replace("ё", "е")
     decomposed = unicodedata.normalize("NFKD", lowered)
     without_accents = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
-    without_dashes = re.sub(r"[-‐‑‒–—―]", " ", without_accents)
+    without_dashes = re.sub(r"[-‐‑‒–—―'’`´]", " ", without_accents)
     return re.sub(r"\s+", " ", without_dashes).strip()
 
 

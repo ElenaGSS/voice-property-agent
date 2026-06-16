@@ -8,7 +8,6 @@ import {
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, "") ||
   "http://localhost:8000";
-const TRANSCRIBE_TIMEOUT_MS = 60_000;
 
 async function request<T>(path: string, options: RequestInit): Promise<T> {
   const response = await fetch(`${BACKEND_URL}${path}`, options);
@@ -22,32 +21,28 @@ async function request<T>(path: string, options: RequestInit): Promise<T> {
 export async function transcribeAudio(
   file: Blob,
   currentQuestion?: string,
+  signal?: AbortSignal,
 ): Promise<string> {
   const formData = new FormData();
   formData.append("file", file, "answer.webm");
   if (currentQuestion) {
     formData.append("current_question", currentQuestion);
   }
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), TRANSCRIBE_TIMEOUT_MS);
-
   try {
     const data = await request<{ text: string; raw_text?: string | null }>(
       "/api/transcribe",
       {
         method: "POST",
         body: formData,
-        signal: controller.signal,
+        signal,
       },
     );
     return data.text;
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
-      throw new Error("TRANSCRIBE_TIMEOUT");
+      throw new Error("TRANSCRIBE_ABORTED");
     }
     throw error;
-  } finally {
-    clearTimeout(timeoutId);
   }
 }
 
