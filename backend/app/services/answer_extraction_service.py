@@ -57,11 +57,60 @@ NEGATIVE_RENT_MARKERS = [
     "нет",
     "n/a",
 ]
+RUSSIAN_NUMBER_WORDS: dict[str, float] = {
+    "ноль": 0,
+    "один": 1,
+    "одна": 1,
+    "одно": 1,
+    "два": 2,
+    "две": 2,
+    "три": 3,
+    "четыре": 4,
+    "пять": 5,
+    "шесть": 6,
+    "семь": 7,
+    "восемь": 8,
+    "девять": 9,
+    "десять": 10,
+    "одиннадцать": 11,
+    "двенадцать": 12,
+    "тринадцать": 13,
+    "четырнадцать": 14,
+    "пятнадцать": 15,
+    "шестнадцать": 16,
+    "семнадцать": 17,
+    "восемнадцать": 18,
+    "девятнадцать": 19,
+    "двадцать": 20,
+    "тридцать": 30,
+    "сорок": 40,
+    "пятьдесят": 50,
+    "шестьдесят": 60,
+    "семьдесят": 70,
+    "восемьдесят": 80,
+    "девяносто": 90,
+    "сто": 100,
+    "двести": 200,
+    "триста": 300,
+    "четыреста": 400,
+    "пятьсот": 500,
+    "шестьсот": 600,
+    "семьсот": 700,
+    "восемьсот": 800,
+    "девятьсот": 900,
+}
+RUSSIAN_HALF_WORDS = {"полтора", "полторы"}
+RUSSIAN_THOUSAND_WORDS = {"тысяча", "тысячи", "тысяч"}
+RUSSIAN_MILLION_WORDS = {"миллион", "миллиона", "миллионов"}
 
 
 def extract_context(answers: list[AnswerItem]) -> dict[str, Any]:
-    answer_text = " ".join(item.answer for item in answers)
-    qa_text = " ".join(f"{item.question} {item.answer}" for item in answers)
+    normalized_pairs = [
+        (item.question, normalize_numeric_answer(item.question, item.answer))
+        for item in answers
+    ]
+    answer_text = " ".join(answer for _, answer in normalized_pairs)
+    qa_text = " ".join(f"{question} {answer}" for question, answer in normalized_pairs)
     normalized_answer_text = _normalize(answer_text)
     normalized_qa_text = _normalize(qa_text)
     qa_values = _extract_values_from_question_answers(answers)
@@ -121,6 +170,53 @@ def extract_context(answers: list[AnswerItem]) -> dict[str, Any]:
     }
 
 
+def normalize_numeric_answer(question_text: str, answer_text: str) -> str:
+    clean_answer = answer_text.strip()
+    if not clean_answer:
+        return clean_answer
+
+    question = _normalize(question_text)
+    is_area_question = _contains_any(question, AREA_QUESTION_MARKERS)
+    is_purchase_question = _contains_any(question, PURCHASE_QUESTION_MARKERS)
+    is_sale_question = _contains_any(question, SALE_QUESTION_MARKERS)
+    is_rent_question = _contains_any(question, RENT_QUESTION_MARKERS)
+
+    if not any([is_area_question, is_purchase_question, is_sale_question, is_rent_question]):
+        return clean_answer
+    if is_rent_question and _is_negative_rent_answer(_normalize(clean_answer)):
+        return clean_answer
+
+    normalized_answer = _normalize(clean_answer)
+    numeric_value: float | None = None
+
+    if is_area_question:
+        numeric_value = (
+            _extract_area_m2(normalized_answer)
+            or _extract_number_value(normalized_answer, min_value=10, max_value=1000)
+            or _extract_russian_number_value(normalized_answer, min_value=10, max_value=1000)
+        )
+        return f"{_format_normalized_number(numeric_value)} м2" if numeric_value else clean_answer
+
+    if is_rent_question:
+        numeric_value = _extract_number_value(
+            normalized_answer,
+            min_value=100,
+            max_value=20000,
+            prefer="min",
+        ) or _extract_russian_number_value(normalized_answer, min_value=100, max_value=20000)
+        return _format_normalized_number(numeric_value) if numeric_value else clean_answer
+
+    if is_purchase_question or is_sale_question:
+        numeric_value = _extract_number_value(
+            normalized_answer,
+            min_value=20000,
+            prefer="max",
+        ) or _extract_russian_number_value(normalized_answer, min_value=20000)
+        return _format_normalized_number(numeric_value) if numeric_value else clean_answer
+
+    return clean_answer
+
+
 def _extract_values_from_question_answers(answers: list[AnswerItem]) -> dict[str, float | str | None]:
     values: dict[str, float | str | None] = {
         "purchase_price": None,
@@ -132,7 +228,8 @@ def _extract_values_from_question_answers(answers: list[AnswerItem]) -> dict[str
 
     for item in answers:
         question = _normalize(item.question)
-        answer = _normalize(item.answer)
+        normalized_answer = normalize_numeric_answer(item.question, item.answer)
+        answer = _normalize(normalized_answer)
 
         if _contains_any(question, PURCHASE_QUESTION_MARKERS):
             values["purchase_price"] = values["purchase_price"] or _extract_number_value(
@@ -336,6 +433,55 @@ def _extract_number_value(
     if prefer == "min":
         return min(values)
     return values[0]
+
+
+def _extract_russian_number_value(
+    text: str,
+    min_value: float | None = None,
+    max_value: float | None = None,
+) -> float | None:
+    tokens = re.sub(r"[.,!?;:€]", " ", _normalize(text)).split()
+    total = 0.0
+    current = 0.0
+    found = False
+
+    for token in tokens:
+        if token in RUSSIAN_NUMBER_WORDS:
+            current += RUSSIAN_NUMBER_WORDS[token]
+            found = True
+            continue
+        if token in RUSSIAN_HALF_WORDS:
+            current += 1.5
+            found = True
+            continue
+        if token in RUSSIAN_THOUSAND_WORDS:
+            total += (current or 1) * 1000
+            current = 0.0
+            found = True
+            continue
+        if token in RUSSIAN_MILLION_WORDS:
+            total += (current or 1) * 1_000_000
+            current = 0.0
+            found = True
+            continue
+
+    if not found:
+        return None
+
+    value = total + current
+    if min_value is not None and value < min_value:
+        return None
+    if max_value is not None and value > max_value:
+        return None
+    return value
+
+
+def _format_normalized_number(value: float | None) -> str:
+    if value is None:
+        return ""
+    if float(value).is_integer():
+        return str(int(value))
+    return str(value).rstrip("0").rstrip(".")
 
 
 def _direct_money_candidates(

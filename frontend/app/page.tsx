@@ -149,7 +149,7 @@ export default function Home() {
     setElapsedSeconds(0);
     setError("");
     try {
-      const text = await transcribeAudio(audioBlob);
+      const text = await transcribeAudio(audioBlob, currentQuestion);
       setTranscript(text);
     } catch (transcriptionError) {
       setError(

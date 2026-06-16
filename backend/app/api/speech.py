@@ -4,9 +4,10 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, File, Form, UploadFile
 
 from app.models.schemas import TranscriptionResponse
+from app.services.answer_extraction_service import normalize_numeric_answer
 from app.services.whisper_service import transcribe_audio
 
 logger = logging.getLogger(__name__)
@@ -14,7 +15,10 @@ router = APIRouter()
 
 
 @router.post("/transcribe", response_model=TranscriptionResponse)
-async def transcribe(file: UploadFile = File(...)) -> TranscriptionResponse:
+async def transcribe(
+    file: UploadFile = File(...),
+    current_question: str | None = Form(None),
+) -> TranscriptionResponse:
     suffix = Path(file.filename or "audio.webm").suffix or ".webm"
     temp_path = ""
 
@@ -25,7 +29,11 @@ async def transcribe(file: UploadFile = File(...)) -> TranscriptionResponse:
 
         logger.info("Received audio file %s saved to temporary path", file.filename)
         text = transcribe_audio(temp_path)
-        return TranscriptionResponse(text=text)
+        normalized_text = normalize_numeric_answer(current_question or "", text)
+        return TranscriptionResponse(
+            text=normalized_text,
+            raw_text=text if normalized_text != text else None,
+        )
     except Exception as exc:
         logger.exception("Transcription endpoint failed")
         return TranscriptionResponse(

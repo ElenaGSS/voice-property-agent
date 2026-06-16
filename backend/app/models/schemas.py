@@ -11,6 +11,7 @@ class AnswerItem(BaseModel):
 
 class TranscriptionResponse(BaseModel):
     text: str
+    raw_text: str | None = None
 
 
 class NextQuestionRequest(BaseModel):

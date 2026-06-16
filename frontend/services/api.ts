@@ -18,14 +18,23 @@ async function request<T>(path: string, options: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function transcribeAudio(file: Blob): Promise<string> {
+export async function transcribeAudio(
+  file: Blob,
+  currentQuestion?: string,
+): Promise<string> {
   const formData = new FormData();
   formData.append("file", file, "answer.webm");
+  if (currentQuestion) {
+    formData.append("current_question", currentQuestion);
+  }
 
-  const data = await request<{ text: string }>("/api/transcribe", {
-    method: "POST",
-    body: formData,
-  });
+  const data = await request<{ text: string; raw_text?: string | null }>(
+    "/api/transcribe",
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
   return data.text;
 }
 
