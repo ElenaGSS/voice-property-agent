@@ -7,6 +7,106 @@ from typing import Any
 
 TOOL_NAME = "Barcelona Market Data Tool"
 DATA_PATH = Path(__file__).resolve().parents[3] / "data" / "barcelona_market_data.json"
+FALLBACK_SOURCE_NOTE = "Fallback MVP dataset used because local JSON file was not found."
+FALLBACK_DATASET: dict[str, Any] = {
+    "updated_at": "2026-06-16",
+    "currency": "EUR",
+    "unit": "price_per_m2",
+    "source_note": FALLBACK_SOURCE_NOTE,
+    "districts": [
+        {
+            "district": "Eixample",
+            "aliases": ["Eixample", "L'Eixample", "Эшампле", "Эйшампле", "Ensanche"],
+            "avg_price_m2": 6100,
+            "confidence": "low",
+            "source_note": FALLBACK_SOURCE_NOTE,
+            "updated_at": "2026-06-16",
+        },
+        {
+            "district": "Gràcia",
+            "aliases": ["Gràcia", "Gracia", "Грасия", "Грасиа"],
+            "avg_price_m2": 5400,
+            "confidence": "low",
+            "source_note": FALLBACK_SOURCE_NOTE,
+            "updated_at": "2026-06-16",
+        },
+        {
+            "district": "Horta-Guinardó",
+            "aliases": [
+                "Horta-Guinardó",
+                "Horta Guinardó",
+                "Horta Guinardo",
+                "Guinardó",
+                "Guinardo",
+                "El Guinardó",
+                "El Guinardo",
+                "Гинардо",
+                "Орта-Гинардо",
+                "Орта Гинардо",
+            ],
+            "avg_price_m2": 3800,
+            "confidence": "low",
+            "source_note": FALLBACK_SOURCE_NOTE,
+            "updated_at": "2026-06-16",
+        },
+        {
+            "district": "Sant Martí",
+            "aliases": ["Sant Martí", "Sant Marti", "Сант Марти", "Poblenou", "Diagonal Mar"],
+            "avg_price_m2": 4700,
+            "confidence": "low",
+            "source_note": FALLBACK_SOURCE_NOTE,
+            "updated_at": "2026-06-16",
+        },
+        {
+            "district": "Sants-Montjuïc",
+            "aliases": ["Sants-Montjuïc", "Sants Montjuic", "Sants-Montjuic", "Сантс", "Монжуик"],
+            "avg_price_m2": 4300,
+            "confidence": "low",
+            "source_note": FALLBACK_SOURCE_NOTE,
+            "updated_at": "2026-06-16",
+        },
+        {
+            "district": "Les Corts",
+            "aliases": ["Les Corts", "Лес Кортс"],
+            "avg_price_m2": 5900,
+            "confidence": "low",
+            "source_note": FALLBACK_SOURCE_NOTE,
+            "updated_at": "2026-06-16",
+        },
+        {
+            "district": "Sarrià-Sant Gervasi",
+            "aliases": ["Sarrià-Sant Gervasi", "Sarria Sant Gervasi", "Sarria-Sant Gervasi", "Саррия", "Сант Жерваси"],
+            "avg_price_m2": 7200,
+            "confidence": "low",
+            "source_note": FALLBACK_SOURCE_NOTE,
+            "updated_at": "2026-06-16",
+        },
+        {
+            "district": "Nou Barris",
+            "aliases": ["Nou Barris", "Ноу Баррис"],
+            "avg_price_m2": 2900,
+            "confidence": "low",
+            "source_note": FALLBACK_SOURCE_NOTE,
+            "updated_at": "2026-06-16",
+        },
+        {
+            "district": "Ciutat Vella",
+            "aliases": ["Ciutat Vella", "Сьютат Велья", "Gotic", "Gòtic", "Raval", "Born", "Barceloneta"],
+            "avg_price_m2": 5200,
+            "confidence": "low",
+            "source_note": FALLBACK_SOURCE_NOTE,
+            "updated_at": "2026-06-16",
+        },
+        {
+            "district": "Sant Andreu",
+            "aliases": ["Sant Andreu", "Сант Андреу"],
+            "avg_price_m2": 3600,
+            "confidence": "low",
+            "source_note": FALLBACK_SOURCE_NOTE,
+            "updated_at": "2026-06-16",
+        },
+    ],
+}
 
 
 def should_use(context: dict[str, Any]) -> bool:
@@ -58,8 +158,32 @@ def run(context: dict[str, Any]) -> dict[str, Any]:
 
 
 def _load_dataset() -> dict[str, Any]:
-    with DATA_PATH.open("r", encoding="utf-8") as file:
-        return json.load(file)
+    for path in _dataset_candidates():
+        if not path.exists():
+            continue
+        try:
+            with path.open("r", encoding="utf-8") as file:
+                return json.load(file)
+        except (OSError, json.JSONDecodeError):
+            continue
+    return FALLBACK_DATASET
+
+
+def _dataset_candidates() -> list[Path]:
+    candidates = [
+        Path.cwd() / "data" / "barcelona_market_data.json",
+        Path.cwd() / "backend" / "data" / "barcelona_market_data.json",
+        DATA_PATH,
+    ]
+    parents = Path(__file__).resolve().parents
+    if len(parents) > 4:
+        candidates.append(parents[4] / "backend" / "data" / "barcelona_market_data.json")
+
+    unique_candidates: list[Path] = []
+    for path in candidates:
+        if path not in unique_candidates:
+            unique_candidates.append(path)
+    return unique_candidates
 
 
 def _find_district(dataset: dict[str, Any], district: str) -> dict[str, Any] | None:
